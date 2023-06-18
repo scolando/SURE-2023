@@ -1,0 +1,165 @@
+---
+title: "Visualizing 2D Categorical and Continuous Variables"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+    theme: yeti
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") }) 
+date: "2023-06-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align = "center", message = FALSE, warning = FALSE)
+library(tidyverse)
+```
+
+```{r}
+ohtani_batted_balls <- read_csv("https://shorturl.at/mnwL1")
+head(ohtani_batted_balls)
+```
+```{r}
+ohtani_batted_balls <- ohtani_batted_balls %>% 
+  filter(pitch_type != "null") %>% 
+  mutate(pitch_type = fct_recode(pitch_type,
+"Changeup" = "CH", "Breaking ball" = "CU", "Fastball" = "FC","Fastball" = "FF","Fastball" = "FS","Breaking ball" = "KC", "Fastball" = "SI", "Breaking ball" = "SL"))
+
+table(ohtani_batted_balls$pitch_type)
+```
+
+## Chi-Squared Distribution
+
+**Question:** Are all pitch types equally likely to occur?
+
+To answer this, we can preform a chi-squared test!
+
+**Hypotheses:**
+
+* $H_0: p_1 = p_2 = ... = p_k$
+
+* $H_a:$ at least two of p_a for i = 1, 2,..,k are not equal to one another.
+
+```{r}
+chisq.test(table(ohtani_batted_balls$pitch_type))
+```
+
+**Conclusion:** At a significance level of 0.05, we reject the null hypothesis in favor of there being very strong evidence (p-value approximately 0) that all pitch types are *not* equally likely to occur.
+
+## 2D Categorical Visualization 
+
+```{r}
+ohtani_batted_balls %>%
+ggplot(aes(x = batted_ball_type,
+fill = pitch_type)) +
+  geom_bar() + 
+  theme_bw()
+```
+
+```{r}
+ohtani_batted_balls %>%
+ggplot(aes(x = batted_ball_type,
+fill = pitch_type)) +
+geom_bar(position = "dodge") +
+  theme_bw()
+```
+
+
+```{r}
+table("Pitch type" = ohtani_batted_balls$pitch_type,
+"Batted ball type" = ohtani_batted_balls$batted_ball_type)
+
+proportions(table(ohtani_batted_balls$pitch_type, ohtani_batted_balls$batted_ball_type))
+```
+
+```{r}
+## joint probabilities table via dplyr
+
+library(gt)
+ohtani_batted_balls %>%
+group_by(batted_ball_type, pitch_type) %>%
+summarize(joint_prob = n() / nrow(ohtani_batted_balls)) %>%
+pivot_wider(names_from = batted_ball_type, values_from = joint_prob,
+values_fill = 0) %>%
+gt()
+```
+
+### Visualizing Independence between 2 Categorical Variables
+
+```{r}
+mosaicplot(table(ohtani_batted_balls$pitch_type, ohtani_batted_balls$batted_ball_type),
+           shade = TRUE, #adds pearson residuals to mosiac plot
+           # rij approx 0 means observed counts are close to expected counts
+           # if abs(rij) > 2 means "signficant" at alpha = 0.05
+           main = "Relationship between batted ball and pitch type")
+
+```
+
+## Continuous by Categorical
+
+```{r}
+ohtani_batted_balls %>%
+ggplot(aes(x = pitch_type,
+y = exit_velocity)) +
+geom_violin() +
+geom_boxplot(width = .2)+
+  theme_bw()
+```
+
+```{r}
+ohtani_batted_balls %>%
+ggplot(aes(x = exit_velocity,
+color = pitch_type)) +
+stat_ecdf() +
+theme_bw() +
+theme(legend.position = "bottom")
+```
+
+```{r}
+ohtani_batted_balls %>%
+ggplot(aes(x = exit_velocity,
+fill = pitch_type)) +
+geom_histogram(alpha = .25, position = "identity") +
+theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+ohtani_batted_balls %>%
+ggplot(aes(x = exit_velocity)) +
+geom_histogram(aes(fill = pitch_type)) +
+theme_bw() +
+facet_wrap(~ pitch_type, ncol = 2)
+```
+
+```{r}
+ohtani_batted_balls %>%
+ggplot(aes(x = exit_velocity)) +
+geom_histogram(aes(fill = pitch_type)) +
+theme_bw() +
+facet_grid(pitch_type ~., margins = TRUE)
+```
+
+### Facets make it easy to move beyond 2D
+
+```{r}
+ohtani_batted_balls %>%
+ggplot(aes(x = pitch_type,
+fill = batted_ball_type)) +
+geom_bar() + theme_bw() +
+facet_wrap(~ outcome, ncol = 5) +
+theme(legend.position = "bottom", axis.text = element_text(size = 4))
+```
+
+## 2D Continuous Relationships 
+
+```{r}
+ohtani_batted_balls %>%
+ggplot(aes(x = exit_velocity,
+y = launch_angle)) +
+geom_point(aes(color = batted_ball_type)) +
+theme_bw()
+```
+
+

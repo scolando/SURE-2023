@@ -1,0 +1,120 @@
+---
+title: "Visualizing 1D categorical and continuous variables"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+    theme: yeti
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") })
+date: "2023-06-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align = 'center', warning = FALSE, message = FALSE)
+library(tidyverse)
+```
+
+```{r}
+ohtani_batted_balls <-
+read_csv("https://shorturl.at/mnwL1")
+```
+
+## Describing 1D Categorical data
+
+```{r}
+ohtani_batted_balls %>% 
+  ggplot(aes(batted_ball_type))+
+  geom_bar()+
+  theme_bw()
+```
+```{r}
+ohtani_batted_balls %>% 
+  ggplot(aes(batted_ball_type))+
+  geom_bar(aes(y = after_stat(count)/sum(after_stat(count))))+
+  theme_bw()
+```
+
+```{r}
+ohtani_batted_balls %>% 
+  group_by(batted_ball_type) %>% 
+  summarize(count = n()) %>% 
+  ungroup() %>% 
+  mutate(total = sum(count),
+         prop = count / total,
+         se = sqrt(prop * (1 - prop) / total),
+         lower = prop - 2 * se,
+         upper = prop + 2 * se,
+         batted_ball_type = fct_reorder(batted_ball_type, prop)) %>% 
+  #fct_reorder comes from forcats 
+  ggplot(aes(x = batted_ball_type)) +
+  geom_bar(aes(y = prop),
+           stat = "identity")+
+  geom_errorbar(aes(ymin = lower,
+ymax = upper),
+color = "red")+
+  theme_bw()
+```
+
+R Cheatsheets: https://posit.co/resources/cheatsheets/ 
+
+```{r}
+ohtani_batted_balls %>% 
+  group_by(batted_ball_type) %>% 
+  summarize(count = n()) %>% 
+  ungroup() %>% 
+  mutate(total = sum(count),
+         prop = count / total,
+         se = sqrt(prop * (1 - prop) / total),
+         lower = prop - 2 * se,
+         upper = prop + 2 * se) %>% 
+  #fct_reorder comes from forcats 
+  ggplot(aes(x = fct_reorder(batted_ball_type, desc(prop)))) +
+  geom_bar(aes(y = prop),
+           stat = "identity")+
+  geom_errorbar(aes(ymin = lower,
+ymax = upper),
+color = "red")+
+  theme_bw()
+```
+
+## Describing 1D Continuous data
+
+* Boxplots 
+
+* Histograms
+
+* eCDF
+
+```{r}
+library(ggbeeswarm)
+ohtani_batted_balls %>%
+ggplot(aes(y = exit_velocity)) +
+geom_beeswarm(aes(x = ""),
+cex = 3) +
+theme_bw() +
+coord_flip()
+```
+```{r}
+ohtani_batted_balls %>%
+ggplot(aes(y = exit_velocity, x = "")) +
+geom_violin()+
+geom_boxplot(width = 0.2)+
+theme_bw() +
+coord_flip()
+```
+
+```{r}
+ohtani_batted_balls %>%
+ggplot(aes(x = exit_velocity,
+y = launch_angle)) +
+geom_point() +
+geom_rug(alpha = 0.4) +
+theme_bw()
+
+# geom_rug:
+##Displays raw data points
+## Useful supplement for summaries and 2D plots...
+```
+

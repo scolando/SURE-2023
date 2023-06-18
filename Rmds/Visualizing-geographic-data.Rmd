@@ -1,0 +1,130 @@
+---
+title: "Visualizing Geographic Data"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+    theme: yeti
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") })
+date: "2023-06-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align = "center", message = FALSE, warning = FALSE)
+library(tidyverse)
+library(ggmap)
+library(maps)
+library(usdata)
+library(mapproj)
+
+#ARCgis is super helpful
+```
+
+```{r}
+US <- c(left = -125, bottom = 24, right = -67, top = 49) 
+
+map <- get_stamenmap(US, zoom = 5, maptype = "toner-lite")
+```
+
+```{r}
+ggmap(map)
+```
+
+# Types of Spatial Data
+
+1. Point Pattern Data
+
+2. Point-Referenced Data
+
+3. Areal Data 
+
+```{r}
+hospitals <- read_csv("https://shorturl.at/hiLR5", na = c("", "NA", "-999"))
+
+hospitals <- hospitals %>%   filter(STATUS == "OPEN") %>%   select(-c(X, Y, OBJECTID, ID, ZIP4, TELEPHONE, NAICS_CODE, NAICS_DESC, SOURCE,            SOURCEDATE, VAL_METHOD, VAL_DATE, WEBSITE, ALT_NAME, TTL_STAFF)) 
+
+head(hospitals, 2)
+```
+
+## Point-Pattern Data on a Map
+
+```{r}
+ggmap(map) +
+  geom_point(data = hospitals, aes(x = LONGITUDE, y = LATITUDE), alpha = 0.25, size = 0.5)
+```
+
+## Point-Referenced Data on a Map
+
+```{r}
+ggmap(map) +
+  geom_point(data = hospitals, aes(x = LONGITUDE, y = LATITUDE, size = BEDS, color = BEDS), alpha = .5) +
+  scale_size_area(breaks = c(1, 10, 25, 50, 100, 150,200,300), 
+                  labels = c(1, 10, 25, 50, 100,150,200,300), name = "#Beds") +
+  scale_color_distiller(palette = "Spectral") +
+labs(color = "#Beds") + 
+theme(legend.position = "bottom")
+```
+
+## Areal Data on a Map
+
+```{r getting number of hospitals per state}
+state_hospitals <- hospitals %>%
+  filter(!is.na(BEDS), !STATE %in% c("AS", "GU", "MP", "PW", "PR", "VI")) %>% 
+  group_by(STATE) %>%
+  summarise(total_beds = sum(BEDS)) %>%
+  mutate(state = tolower(abbr2state(STATE)))
+
+head(state_hospitals)
+```
+
+
+```{r getting state border information}
+state_borders <- map_data("state")
+
+head(state_borders)
+```
+
+```{r left join}
+state_plot_data <- state_borders %>%
+  left_join(state_hospitals, by = c("region" = "state"))
+
+head(state_plot_data)
+```
+
+```{r}
+state_plot_data %>%  ggplot() +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = total_beds),  color = "black") +
+  scale_fill_gradient(low = "white", high = "navy") +
+  theme_void() +
+  coord_map("polyconic") +
+  labs(fill = "Total Beds") + 
+  theme(legend.position = "bottom", legend.text = element_text(size = 6))
+```
+
+```{r doings beds per capita for each state}
+state_pop <- tibble(state_stats) %>%
+  select(abbr, pop2010) 
+
+state_hospitals <- left_join(state_hospitals, state_pop,                              by = c("STATE" = "abbr")) %>%
+  mutate(bed_per_cap = total_beds / pop2010)
+
+head(state_hospitals)
+```
+
+```{r}
+per_capita_plot_data <- state_borders %>%
+  left_join(state_hospitals, by = c("region" = "state"))
+```
+
+```{r}
+per_capita_plot_data %>%  ggplot() +
+  geom_polygon(aes(x = long, y = lat, group = group,                   fill = bed_per_cap), color = "black") +
+  scale_fill_gradient(low = "white", high = "navy") +
+  theme_void() +
+  coord_map("polyconic") +
+  labs(fill = "Beds / Population") +
+  theme(legend.position = "bottom", legend.text = element_text(size = 6))
+```
+

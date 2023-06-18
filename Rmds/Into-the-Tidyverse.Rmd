@@ -1,0 +1,142 @@
+---
+title: "Into the Tidyverse"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+    theme: yeti
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") })
+date: "2023-06-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(Lahman)
+library(gt)
+```
+
+```{r}
+Batting <- as_tibble(Batting)
+# tibble = Tidyverse version of data frame
+```
+
+```{r}
+dim(Batting)
+```
+
+```{r}
+head(Batting, 10)
+```
+
+```{r}
+names(Batting)
+```
+
+```{r}
+str(Batting)
+```
+
+```{r}
+summary(Batting$yearID)
+table("Leagues" = Batting$lgID)
+#table(Batting$lgID, Batting$teamID)
+```
+
+```{r}
+mlb_batting <- Batting %>%
+  filter(lgID %in% c("AL", "NL"))
+```
+
+```{r}
+sel_batting <- Batting %>%
+  select(yearID, G, AB, R, H)
+```
+
+```{r}
+hr_batting <- Batting %>%
+  arrange(desc(HR))
+```
+
+```{r}
+summarize(Batting, max(stint), median(AB))
+```
+
+```{r}
+Batting %>%
+  arrange(desc(stint))
+```
+
+```{r}
+new_batting <- Batting %>%
+  mutate(batting_avg = H/AB)
+
+head(new_batting)
+
+
+## command + shift + m for shortcut for pipe
+new_batting %>%
+  select(batting_avg, playerID) %>%
+  arrange(desc(batting_avg)) %>%
+  head()
+```
+```{r}
+Batting %>%
+  filter(lgID %in% c("AL", "NL"),
+         AB > 300) %>%
+  mutate(BA = H/AB) %>%
+  arrange(desc(BA)) %>% 
+  select(playerID, yearID, BA) %>% 
+  head(n = 5)
+```
+
+```{r}
+Batting %>%
+  filter(lgID %in% c("AL", "NL"),
+         AB > 300) %>%
+  mutate(so_to_bb = SO/BB) %>%
+  arrange(desc(so_to_bb)) %>% 
+  select(playerID, yearID, so_to_bb) %>% 
+  slice(c(1,2,10,100))
+```
+
+```{r}
+Batting %>% 
+  filter(lgID %in% c("AL", "NL")) %>% 
+  group_by(yearID) %>%
+  summarize(tot_hr = sum(HR), tot_so = sum(SO), tot_bb = sum(BB)) %>% 
+  arrange(desc(tot_hr)) %>% 
+  slice(1:5)
+```
+
+```{r}
+year_batting_summary <- Batting %>% 
+  filter(lgID %in% c("AL", "NL")) %>% 
+  group_by(yearID) %>% 
+  summarize(total_hits = sum(H, na.rm = TRUE), #removes missing values
+            total_hr = sum(HR, na.rm = TRUE),
+            total_so = sum(SO, na.rm = TRUE),
+            total_walks = sum(BB, na.rm = TRUE),
+            total_at_bats = sum(AB, na.rm = TRUE)) %>%
+  mutate(overall_batting_avg = total_hits/total_at_bats)
+
+head(year_batting_summary)
+  
+```
+
+```{r}
+year_batting_summary %>% 
+  arrange(desc(total_hr)) %>% 
+  slice(1:3)
+```
+
+```{r}
+year_batting_summary %>% 
+  select(yearID, overall_batting_avg) %>% 
+  rename(Year = yearID, `Overall Batting Average` = overall_batting_avg) %>% 
+  slice(c(1, n())) %>%   #n() gives you last row in data frame 
+  gt()
+```
+

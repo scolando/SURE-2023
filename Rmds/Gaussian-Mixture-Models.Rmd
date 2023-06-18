@@ -1,0 +1,186 @@
+---
+title: "Gaussian Mixture Models"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+    theme: yeti
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") })
+date: "2023-06-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align = "center", message = FALSE, warning = FALSE)
+library(tidyverse)
+library(mclust)
+```
+
+**Gaussian Mixture Models** allow us to do soft assignments in clusters (i.e., allow for some uncertainty in the clustering results)
+
+# Mixture Models
+
+* $\pi_k$ = mixture proportions (or weights) where $\pi_k > 0$ and $\sum_k{\pi_k} = 1$ 
+
+**COMPONENT = CLUSTER**
+
+To generate a new point:
+
+1. Pick a distribution/component among our K options by introduce a new variable:
+
+z ~ Multinomial($\pi_1, \pi_2, ..., \pi_k$) i.e. a categorical variable saying which group the new point is from
+
+2. Generate an observation with that distribution/component (i.e. x | z ~ $f_k$)
+
+
+## Assumptions
+
+We assume a **parametric mixture model** with parameters $\theta_k$ for the kth component (i.e., a mixture of the K component distributions)
+
+Assume each component is **Gaussian/Normal** meaning that $f_k(x;\theta_k) = N(x;\mu_k, \sigma_k^2)$
+
+We need to estimate each parameter. We do this with the **likelihood function**, i.e., the probability (or density) of observing the data given the parameters (and model).
+
+# Expectation-Maximization (EM) Algorithm
+
+Helpful when we have more than one component 
+
+**We alternative between the following:**
+
+* pretending to know the probability each observation belongs to each group, to estimate the parameters of the components 
+
+* pretending to know the parameters of the components, to estimate the probability each observation belongs to each group 
+
+*Similar to K-means algorithm*
+
+**Expectation** step: calculate $\hat{z}_{ik}$ = expected membership of observation *i* in cluster k
+
+**Maximization** step: update parameter estimates with **weighted** MLE using $\hat{z}_{ik}$
+
+**More Information: **
+
+* https://towardsdatascience.com/expectation-maximization-explained-c82f5ed438e5
+
+# Relation to Clustering
+
+From the EM algorithm:$\hat{z}_{ik}$ is a **soft membership** of observation *i* in cluster *k*
+
+* you can assign observation *i* to a cluster with the largest $\hat{z}_{ik}$
+
+* measure cluster assignment uncertainty = 1 - $max_k\hat{z}_{ik}$
+
+# Multivariate GMMs
+
+Say we have p parameters in our model:
+
+$f_k(x; \theta_k) \sim N(\mu_k, \sum_k)$
+
+* $\mu_k$ is a vector of means in p dimensions 
+
+* $\sum_k$ is the p by p **covariance** matrix, which describes the joint variability between pairs of variables.
+
+To avoid issues with model fitting and estimation as we increase the number of dimensions 
+
+We can use **constraints** on multiple aspects of the *k* covariance matrices
+
+**volume:** size of the clusters (i.e., number of observations)
+
+**shape:** direction of variance (i.e., which variables display more variance)
+
+**orientation:** aligned with the axes (low covariance) versus tilted (due to relationships between variables)
+
+# Bayesian Information Criteria (BIC)
+
+**procedure for model selection**
+
+BIC is a penalized likelihood measure: 
+
+$$BIC = 2*log(L) - m*log(n)$$
+* Log(L) is the log-likelihood of the considered model
+
+* with *m* parameters and n observations
+
+* penalizes large models with many clusters without constraints 
+
+* **we can use BIC to choose the covariance constraints AND number of clusters K**
+
+# Mixture Model Example 
+
+```{r loading and wrangling the data}
+nba_pos_stats <-   read_csv("https://shorturl.at/mFGY2")
+
+# Find rows for players indicating a full season worth of stats
+tot_players <- nba_pos_stats %>% filter(tm == "TOT") # Stack this dataset with players that played on just one team 
+nba_player_stats <- nba_pos_stats %>%
+  filter(!(player %in% tot_players$player)) %>%
+  bind_rows(tot_players)
+
+# Filter to only players with at least 125 minutes played 
+
+nba_filtered_stats <- nba_player_stats %>%
+  filter(mp >= 125) 
+
+head(nba_filtered_stats)
+```
+
+```{r}
+nba_mclust <- Mclust(dplyr::select(nba_filtered_stats, x3pa, trb))
+```
+
+```{r}
+summary(nba_mclust)
+```
+
+```{r}
+plot(nba_mclust, what = 'BIC',
+     legendArgs = list(x = "bottomright",
+                       ncol = 4))
+```
+
+**Diagonal versus spherical constraints?**
+
+**To look at:** 
+
+* https://alliance.seas.upenn.edu/~cis520/wiki/index.php?n=Lectures.EM
+
+```{r}
+plot(nba_mclust, what = 'classification')
+```
+
+
+```{r}
+table("Clusters" = nba_mclust$classification, "Positions" = nba_filtered_stats$pos)
+```
+
+
+## Cluster Probabilites
+
+
+```{r}
+nba_player_probs <- nba_mclust$z
+
+colnames(nba_player_probs) <-   paste0('Cluster ', 1:3)
+
+nba_player_probs <- nba_player_probs %>%
+  as_tibble() %>%  
+  mutate(player = nba_filtered_stats$player) %>%
+  pivot_longer(contains("Cluster"), names_to = "cluster",               values_to = "prob")
+
+nba_player_probs %>%  ggplot(aes(prob)) +  geom_histogram() +  theme_bw() +  facet_wrap(~ cluster, nrow = 2)
+```
+
+## Player Probabilities
+
+```{r}
+nba_filtered_stats %>%  mutate(cluster = nba_mclust$classification,         uncertainty = nba_mclust$uncertainty) %>%
+  group_by(cluster) %>%
+  arrange(desc(uncertainty)) %>%
+  slice(1:5) %>%  ggplot(aes(y = uncertainty, x = reorder(player, uncertainty))) +
+  geom_point() +
+  coord_flip() +
+  theme_bw() +
+  facet_wrap(~ cluster, scales = 'free_y', nrow = 3)
+```
+
+**Uncertainty = probability that the players assigned in some cluster i (between 1 and k), would be assigned to any of the other k-1 clusters**

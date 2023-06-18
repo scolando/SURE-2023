@@ -1,0 +1,82 @@
+---
+title: "The Grammar of Graphics and ggplot2"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+    theme: yeti
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") })
+date: "2023-06-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(Lahman)
+```
+
+Anscombe's Quartet: demonstrates that simple summary statistics do not cut it. We need visualizations to better understand the distributions and corroborate our inferences.
+  Data Viz: Florence Nightingale 
+  
+```{r}
+Batting <- as_tibble(Batting)
+
+year_batting_summary <- Batting %>% 
+  filter(lgID %in% c("AL", "NL")) %>% 
+  group_by(yearID) %>% 
+  summarize(across(c("H", "HR", "SO", "BB", "AB"), \(x) sum(x, na.rm = TRUE))) %>% 
+  mutate(batting_avg = H/AB)
+
+year_batting_summary
+  
+```
+
+Hadley Wickham PhD thesis ggplot2
+
+
+**Grammar of Graphics:**
+
+1. data
+
+2. geom
+
+3. aes
+
+4. scale 
+
+5. facet 
+
+6. stat
+
+7. coord
+
+8. labs
+
+9. theme
+
+```{r}
+year_batting_summary %>% 
+  ggplot(aes(x = yearID, y = HR, color = SO))+
+  geom_point(aes(size = BB))+
+  geom_line()+
+  scale_y_continuous(breaks = seq(0,6000, by = 1000))+
+  scale_color_gradient(low = "darkblue", high = "darkorange")+
+  theme_bw()+
+  labs(xlab = "Homeruns", "")
+```
+
+```{r}
+year_batting_summary %>% 
+  select(yearID, HR, SO, BB) %>%
+  pivot_longer(HR:BB, names_to = "stat", values_to = "stat_values") %>% 
+  ggplot(aes(x = yearID, y = stat_values))+
+  geom_point(color = "blue")+
+  geom_line(color = "blue", linetype = "dashed")+
+  facet_wrap(~stat, scales = "free_y", nrow = 3)+
+  theme_bw()+
+  theme(strip.background = element_blank())+
+  labs(xlab = "Year")
+```
+

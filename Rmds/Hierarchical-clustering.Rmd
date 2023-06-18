@@ -1,0 +1,222 @@
+---
+title: "Hierarchical Clustering"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float:
+      collapsed: FALSE
+    theme: yeti
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") })
+date: "2023-06-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align = "center", message = FALSE, warning = FALSE)
+library(tidyverse)
+library(dslabs)
+library(seriation)
+library(ggdendro)
+library(protoclust)
+```
+
+----
+
+# Data Set-up
+
+```{r}
+gapminder <- as_tibble(gapminder)
+head(gapminder)
+```
+
+```{r}
+clean_gapminder <- gapminder %>%  filter(year == 2011, !is.na(gdp)) %>%  mutate(log_gdp = log(gdp))
+clean_gapminder
+```
+
+## Standardization
+
+```{r}
+clean_gapminder <- clean_gapminder %>%
+  mutate(s_log_gdp = as.numeric(scale(log_gdp, center = TRUE, scale = TRUE)), s_life_exp = as.numeric(scale(life_expectancy,        center = TRUE, scale = TRUE))) 
+
+clean_gapminder %>%
+  ggplot(aes(x = s_log_gdp, y = s_life_exp))+
+  geom_point() +
+  theme_bw() +
+  coord_fixed()
+```
+
+# Computing the distance matrix
+
+**Pairwise Euclidean Distance:**
+
+```{r}
+gap_dist <- dist(dplyr::select(clean_gapminder, s_log_gdp, s_life_exp))
+```
+
+**Crafting the Matrix:**
+
+```{r}
+gap_dist_matrix <- as.matrix(gap_dist)
+rownames(gap_dist_matrix) <- clean_gapminder$country
+colnames(gap_dist_matrix) <- clean_gapminder$country
+head(gap_dist_matrix[1:3, 1:3])
+```
+# Plotting Similarities 
+
+```{r}
+
+long_dist_matrix <- as_tibble(gap_dist_matrix) %>%
+  mutate(country1 = rownames(gap_dist_matrix)) %>%
+  pivot_longer(cols = -country1, names_to = "country2", values_to = "distance")
+         
+long_dist_matrix %>%
+  ggplot(aes(x = country1, y = country2, fill = distance)) +
+  geom_tile() +
+  theme_bw() +
+  theme(axis.text = element_blank(), axis.ticks = element_blank(), legend.position = "bottom") +  scale_fill_gradient(low = "darkorange", high = "darkblue")
+```
+
+
+
+```{r}
+gap_dist_seriate <- seriate(gap_dist)
+
+gap_order <- get_order(gap_dist_seriate)
+
+gap_countries_order <-
+  as.character(clean_gapminder$country[gap_order]) 
+                                       long_dist_matrix$country1 <- as_factor(long_dist_matrix$country1) 
+                                       long_dist_matrix$country2 <- as_factor(long_dist_matrix$country2) 
+                                       long_dist_matrix %>%                                         mutate(country1 = fct_relevel(country1,            gap_countries_order), country2 = fct_relevel(country2,                     gap_countries_order)) %>%
+                                         ggplot(aes(x = country1, y = country2,              fill = distance)) +  geom_tile() + theme_bw() +  theme(axis.text = element_blank(),         axis.ticks = element_blank(), legend.position = "bottom") +
+                                         scale_fill_gradient(low = "darkorange", high = "darkblue")
+```
+# Agglomerative Hierarchical Clustering
+
+Pretend all *n* observations are their own cluster
+
+* Step 1: Compute the pairwise dissimilarities between each cluster (e.g., distance matrix)
+
+* Step 2: Idenitfy the pair of clusters that are least dissimilar
+
+* Step 3: Fuse these two clusters into a new cluster
+
+* Repeat Steps 1 to 3 until all observations are in the same cluster
+
+* **Bottom-up** agglomerative clusters that forms a tree/hierarchy of merging 
+
+## How do we Define Dissimilarity between Clusters?
+
+**We need a linkage function!**
+
+* Complete linkage: uses maximum value of these dissimilarities (i.e., distance)
+
+* Single linkage: uses minimum value of these dissimilarities (i.e., distance)
+
+* Average Linkage: uses average value of these dissimilarities (i.e., distance)
+
+**Define dissimilarity between two clusters based on our initial dissimilarity matrix between observations**
+
+## Complete Linkage Example 
+
+```{r}
+gap_complete_hclust <- hclust(gap_dist, method = "complete")
+```
+
+```{r}
+clean_gapminder %>%  mutate(country_clusters =         as.factor(cutree(gap_complete_hclust, k = 4))) %>%
+  ggplot(aes(x = s_log_gdp, y = s_life_exp,
+             color = country_clusters)) +  geom_point() +
+  ggthemes::scale_color_colorblind() +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+### Dendrogram
+
+```{r}
+ggdendrogram(gap_complete_hclust,             theme_dendro = FALSE, labels = FALSE,             leaf_labels = FALSE) +
+  labs(y = "Dissimilarity between clusters")  +
+  theme_bw() +
+  theme(axis.text.x = element_blank(),         axis.title.x = element_blank(), axis.ticks.x = element_blank(), panel.grid = element_blank())
+```
+
+* Each leaf = one observation
+
+* Height of branch represents the dissimilarity between clusters (Horizontal position along the x-axis means nothing after the first step)
+
+**You can specify the height to cut with h (height) instead of k**
+
+```{r}
+clean_gapminder %>%  mutate(country_clusters =         as.factor(cutree(gap_complete_hclust, h = 5))) %>%
+  ggplot(aes(x = s_log_gdp, y = s_life_exp,
+             color = country_clusters)) +  geom_point() +
+  ggthemes::scale_color_colorblind() +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+**NOTE: YOU WILL GET DIFFERENT RESULTS BASED ON HOW YOU DEFINE THE LINKAGE FUNCTION**
+
+## More Linkage Functions
+
+* Centroid Linkage: Computes the dissimilarity between the centroid for cluster 1 and the centroid for cluster 2 (i.e., the distance between the averages of the two clusters)
+
+* Ward's linkage: Merges a pair of clusters to minimize the within-cluster variance (i.e., aim is to minimize the objective function from *K-means*)
+
+* Minimax Linkage
+
+Each cluster is defined **by a prototype** observation (most representative)
+
+**Identify the point whose farthest point is closest**
+
+Use this minimum-maximum distance as the measure of cluster dissimilarity 
+
+Dendrogram interpretation: each point is less than or equal to h in dissimilarity to the the prototype of the cluster 
+
+* **Cluster centers are chosen among the observations themselves -- hence the prototype**
+
+## Minimax Linkage Example 
+
+**Dendrogram**
+
+```{r}
+gap_minimax <- protoclust(gap_dist)
+plot(gap_minimax)
+```
+
+**Scatterplot**
+
+```{r}
+minimax_country_clusters <-   protocut(gap_minimax, k = 4)
+
+clean_gapminder %>%
+  mutate(country_clusters =     as.factor(minimax_country_clusters$cl)) %>%
+  ggplot(aes(x = s_log_gdp, y = s_life_exp,             color = country_clusters)) +  geom_point() +   ggthemes::scale_color_colorblind() +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+**To find prototypes:**
+
+```{r}
+minimax_country_clusters$protos
+```
+
+Indices of the prototypes (in the order of the clusters)
+
+**Finding countries with these indices:**
+
+```{r}
+clean_gapminder %>%  dplyr::select(country, gdp, life_expectancy,                 population, infant_mortality) %>%  slice(minimax_country_clusters$protos)
+```
+
+**How are these clusters related to the continents?**
+
+```{r}
+table("Clusters" = minimax_country_clusters$cl, "Continents" = clean_gapminder$continent)
+```
+
+
