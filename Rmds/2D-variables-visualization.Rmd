@@ -1,11 +1,6 @@
 ---
 title: "Visualizing 2D Categorical and Continuous Variables"
-output: 
-  html_document:
-    toc: TRUE
-    toc_float:
-      collapsed: FALSE
-    theme: yeti
+output: pdf_document
 knit: (function(inputFile, encoding) {
   rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") }) 
 date: "2023-06-09"

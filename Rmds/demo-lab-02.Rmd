@@ -1,13 +1,8 @@
 ---
 title: "Data Wrangling"
-output: 
-  html_document:
-    toc: TRUE
-    toc_float:
-      collapsed: FALSE
-    theme: yeti
+output: pdf_document
 knit: (function(inputFile, encoding) {
-  rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") })
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") }) 
 date: "June 7, 2023"
 ---
 
