@@ -1,0 +1,108 @@
+---
+title: "Supervised Learning: Model Assessment and Selection"
+output: pdf_document
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") })
+date: "06-20-2023"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.align = "center")
+```
+
+# Supervised Learning
+
+**Goal:** Uncover associations between a set of predictor variables and a single response (or dependent) variable.
+
+**Examples of Statistical Learning Methods/Algorithms:**
+
+* GLMS and penalized versions (Lasso, elastic net)
+
+* Smoothing splines, GAMs
+
+* Decision trees and its variants
+
+* Neural nets
+
+**Two Main Types:**
+
+* Regression models 
+
+* Classical models 
+
+# How to Determine which Method to Use?
+
+**Depends on your goal:** *inference* versus *prediction*
+
+$$\hat{Y} = \hat{f}(X)$$
+Any algorithm can be used for prediction, however options are limited for inference. Inference is really about learning the details of $\hat{f}(X)$.
+
+## Model Flexibility vs. Interpretability
+
+
+```{r, out.width='100%', out.height='30%'}
+knitr::include_graphics("images/flexibility-interpret.png", dpi = 300)
+```
+
+
+Generally there is a **trade-off** between a model's flexibility and how interpretable it is (i.e., explainable power).
+
+* **Parametric** models, for which we can write down a mathematical expression for f(X) **before observing the data** and are **inherently less flexible**.
+
+* **Nonparametric** models, in which f(X) is **estimated from the data** (e.g., kernel regression).
+
+# Model Assessment vs. Selection
+
+**Model Assessment**: evaluating how well a learned model performs, via the use of a single-metric
+
+**Model Selection**: selecting the 'best' model from a suite of learning models.
+
+## How Do We Deal with Flexibility?
+
+**Goal:** have good estimates of f(X) **without overfitting** the data.
+
+**Two Common Approaches:**
+
+* *Split data into test and training.*
+
+  Training = data used to train models
+  
+  Test = data used to test models
+  
+* *K-fold cross validation*
+
+  Each observation is placed in "hold-out" aka test data exactly once. Repeat data splitting k times.
+  
+  *Brief note on Reproducibility:* set a seed so random processes/analyses can be reproduced!
+
+## Model Assessment Metrics
+
+**Loss Function** (aka objective or cost function) is a metric that represents **the quality of fit of a model**
+
+For regression, we typically use **mean squared error (MSE)**
+
+*Note that MSE is unit-dependent*
+
+For classification:
+
+* **Misclassification rate (MCR):** percentage of predictions that are wrong
+
+* **Area under Curve (AUC)**
+
+* interpretation of these metrics can be affected by **class imbalance**
+
+## Model Selection
+
+* Bias-Variance Trade-off
+
+'Best' model can sometimes be thought of the model that minimizes the test-set MSE, where **true** MSE can be decomposed into:
+
+$$MSE = (Bias)^2 + Variance$$
+
+
+
+
+
+
+
+
