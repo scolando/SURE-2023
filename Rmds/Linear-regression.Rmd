@@ -1,0 +1,218 @@
+---
+title: "Supervised Learning: Linear Regression"
+output: pdf_document
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") }) 
+date: "06-22-2023"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center", out.width = '70%', out.height = '70%')
+library(tidyverse)
+library(dslabs)
+library(broom)
+library(ggfortify)
+```
+
+## Model:
+
+$$Y_i = \beta_0 + \beta_1X_i + \epsilon_i$$
+
+*for i = 1, 2, ..., n* and where:
+
+$$\epsilon_i \sim N(0, \sigma^2)$$
+
+## Simple Linear Regression Estimation:
+
+$$E[Y_i | X_i] = \beta_0 + \beta_1X_i$$
+* average value for Y given the value for X
+
+* averaging out the error ($\epsilon$ has a mean of 0)
+
+## How to Calculate our Coefficient Estimates?
+
+Ordinary least squares (OLS) finds the coefficient estimates by minimizing to residual sum of squares (RSS)
+
+$$RSS(\beta_0, \beta_1) = \sum_{i = 1}^n{(Y_i - \beta_0 - \beta_1X_i)^2}$$
+
+## Connection to Covariance and Correlation
+
+**Covariance** = joint variability of two variables
+
+**Correlation** = normalized form of the covariance, ranges from -1 to 1
+
+## Gapminder Data
+
+```{r}
+gapminder <- as_tibble(gapminder)
+clean_gapminder <- gapminder %>%
+  filter(year == 2011, !is.na(gdp)) %>%
+  mutate(log_gdp = log(gdp))
+
+clean_gapminder
+```
+
+## Modeling Life Expectancy
+
+```{r}
+clean_gapminder %>%
+  ggplot(aes(x = life_expectancy)) +
+  geom_histogram(color = "black", fill = "darkblue", alpha = 0.3) +
+  theme_bw() +
+  labs(x = "Life expectancy")
+```
+
+```{r}
+gdp_plot <- clean_gapminder %>%
+  ggplot(aes(x = log_gdp, y = life_expectancy)) +
+  geom_point(alpha = 0.5) +
+  theme_bw() +  labs(x = "log(GDP)", y = "Life expectancy") 
+
+gdp_plot
+```
+
+```{r}
+init_lm <- lm(life_expectancy ~ log_gdp, data = clean_gapminder)
+
+summary(init_lm)
+```
+
+\newpage
+
+## Inference with OLS
+
+**p-values:** estimated probability of observing the t-value or more extreme given the null hypothesis that $\beta = 0$ is true.
+
+When the p-value < coefficient threshold of $\alpha = 0.05$, **sufficient evidence to reject the null hypothesis that the coefficient is zero.**
+
+Typically, t-values with an absolute value greater than 2 indicate a **significant** relationship at $\alpha = 0.05$. I.e., there is a **significant** association between `life_expectancy` and `log_gdp`.
+
+### P-value Caveats
+
+* If the true value of the coefficient is $\beta = 0$, the p-value is sampled from a **uniform(0,1) distribution**. So, it is just as likely to have a p-value of 0.45 as 0.84 or 0.999 or 0.000001.
+
+Hence, we only reject for low $\alpha$ values like 0.05
+
+* Controlling the Type 1 error rate at $\alpha = 0.05$, i.e., the probability of a **false positive** mistake
+
+* 5% chance that you will conclude there is a significant association between x and y *even when there is none*.
+
+Also, remember $SE = \frac{\sigma}{\sqrt{n}}$
+
+* As n gets large **standard error goes to zero** and *all* predictors are eventually deemed significant
+
+* While the p-values might be informative, we will explore other approaches to determine which subset of predictors to include (e.g., holdout performance)
+
+### Multiple R-squared
+
+**R-squared** estimates the **proportion of variance** in Y explained by X.
+
+```{r}
+with(clean_gapminder, cor(log_gdp, life_expectancy))^2
+```
+
+Equivalently: 
+
+```{r}
+var(predict(init_lm)) / var(clean_gapminder$life_expectancy)
+```
+
+### Generating Predictions
+
+```{r}
+train_preds <- predict(init_lm)
+head(train_preds)
+
+## also could do: head(init_lm$fitted.values)
+```
+
+
+### Predictions for New Data
+
+```{r}
+us_data <- clean_gapminder %>%
+  filter(country == "United States")
+
+new_us_data <- us_data %>%
+  dplyr::select(country, gdp) %>%
+  slice(rep(1, 3)) %>%
+  mutate(adj_factor = c(0.25, 0.5, 0.75), log_gdp = log(gdp * adj_factor))
+
+new_us_data$pred_life_exp <- predict(init_lm, newdata = new_us_data) 
+
+gdp_plot +
+  geom_point(data = new_us_data, aes(x = log_gdp, y = pred_life_exp), color = "darkred", size = 5)
+```
+
+### Observed Values Against Predictions
+
+```{r}
+clean_gapminder %>%  mutate(pred_vals = predict(init_lm)) %>% 
+  ggplot(aes(x = pred_vals, y = life_expectancy)) +
+  geom_point(alpha = 0.5) + 
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red", size = 2) +
+  theme_bw()
+```
+
+* "Perfect" model will follow the **diagonal**
+
+**With `broom` package:**
+
+```{r}
+clean_gapminder <-   broom::augment(init_lm, clean_gapminder) 
+
+clean_gapminder %>%
+  ggplot(aes(x = .fitted, y = life_expectancy)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red", size = 2) +
+  theme_bw()
+```
+
+### Residuals Against Predicted Values
+
+* Residuals = observed - predicted
+
+* Conditional on the predicted values, the residuals should have a mean of zero
+
+* Residuals should NOT display any pattern
+
+```{r}
+clean_gapminder %>%  ggplot(aes(x = .fitted, y = .resid)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red", size = 2) + 
+  # To plot the residual mean
+  geom_smooth(se = FALSE) +
+  theme_bw()
+```
+
+# Multiple Regression
+
+Model:
+
+$$Y = \beta_0 + \beta_1X_1 + \beta_2X_2 + ... + \beta_pX_p + \epsilon$$
+where number of observations is greater than number of parameters being estimated.
+
+```{r}
+multiple_lm <- lm(life_expectancy ~ log_gdp + fertility, data = clean_gapminder)
+```
+
+**Use the adjusted R-squared when including multiple variables**
+
+* Adjusts for the number of parameters and number of observations being estimated by the model
+
+* Adding more variables **will always increase** the Multiple R-squared
+
+By assuming $\epsilon_i \overset{\mathrm{iid}}{\sim} N(0, \sigma^2)$, what we really mean is:
+
+$$Y  \overset{\mathrm{iid}}{\sim} N(\beta_0 + \beta_1X_1 + \beta_2X_2 + ... + \beta_pX_p, \sigma^2)$$
+**Unbiased estimate:** $\hat{\sigma}^2 = \frac{RSS}{n-(p+1)}$, degrees of freedom n - (p + 1). I.e., data supplies us with *n* degrees of freedom and we used up p + 1.
+
+### Checking the Assumptions about Normality with `ggfortify'
+
+```{r}
+autoplot(multiple_lm, ncol = 4) +
+  theme_bw()
+```
+
+* standardized residuals = residuals/sd(residuals) which is equivalent to `.std.resid` from `augment()`.
+
