@@ -1,0 +1,118 @@
+---
+title: "Decision Trees"
+output: pdf_document
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") }) 
+date: "July 7th, 2023"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**SHORT VERSION:** Machine Learning is a subset of statistical learning that focuses on predictions.
+
+* We do not assume a parametric form for the mapping *a priori*, even if technically one can write one down *a posteriori*.
+
+Note though, this definition is hazy and contested. 
+
+# Decision Trees
+
+* Partition training data into homogeneous nodes/subgroups with similar response values
+
+* Found recursively using binary partitions
+
+* We stop splitting the tree once a stopping criteria has been reached (e.g. maximum depth allowed)
+
+* For each subgroup node predictions are made with:
+
+Regression tree: average of the response values for each node
+
+Classification tree: the most popular class in the node
+
+We can make a prediction for an observation by **following its path along the tree**
+
+## Benefits:
+
+* Decision trees are very easy to explain to non-statiscians
+
+* Easy to visualize and thus easy to interpret without assuming a parametric form
+
+## Objective at each split:
+
+Find the best variable to partition the data into one of two regions, to minimize the error between the actual response and the nodes predicted constant
+
+We minimize the node's impurity via the **Gini Index** in classification trees
+
+Split yield **locally optima** results, so we are NOT guaranteed to train a model that is globally optimal.
+
+To avoid overfitting to the training data: we will tune the maximum tree depth or minimum node size.
+
+We can also prune a very complicated tree back to an optimal substree using a cost complexity parameter ($\alpha$).
+
+
+# Example
+
+```{r load-data, warning = FALSE, message = FALSE}
+library(tidyverse)
+mlb_data <- read_csv("https://shorturl.at/iCP15") %>%
+  janitor::clean_names() %>%
+  mutate_at(vars(bb_percent:k_percent), parse_number)
+head(mlb_data)
+```
+
+```{r init-rpart}
+library(rpart)
+init_mlb_tree <- rpart(formula = w_oba ~ bb_percent + k_percent + iso,
+                       data = mlb_data, method  = "anova")
+init_mlb_tree
+```
+
+```{r plot-tree, fig.align ='center', fig.height=6}
+library(rpart.plot)
+rpart.plot(init_mlb_tree)
+```
+
+```{r plot-full-tree, fig.align ='center', fig.height=4}
+full_mlb_tree <- rpart(formula = w_oba ~ 
+            bb_percent + k_percent + iso,
+            data = mlb_data, method = "anova", 
+            control = list(cp = 0, xval = 10))
+rpart.plot(full_mlb_tree)
+```
+
+```{r plot-full-complexity, fig.align ='center', fig.height=4}
+plotcp(full_mlb_tree)
+```
+
+## Train with `caret`
+
+```{r caret-tree, fig.align ='center', fig.height=5}
+library(caret)
+caret_mlb_tree <- train(w_oba ~ bb_percent + k_percent + iso + avg + obp + slg + war,
+                        data = mlb_data, method = "rpart",
+                        trControl = trainControl(method = "cv", number = 10),
+                        tuneLength = 20)
+ggplot(caret_mlb_tree) + theme_bw()
+```
+
+## Display the final model
+
+```{r, fig.align ='center', fig.height=6}
+rpart.plot(caret_mlb_tree$finalModel)
+```
+
+## Summarizing variables in tree-based models
+
+```{r var-imp, fig.align ='center', fig.height=4}
+library(vip)
+vip(caret_mlb_tree, geom = "point") + 
+  theme_bw()
+```
+
+```{r pdp, fig.align ='center', fig.height=4}
+library(pdp)
+partial(caret_mlb_tree, pred.var = "obp") %>% 
+  autoplot() + theme_bw()
+
+```

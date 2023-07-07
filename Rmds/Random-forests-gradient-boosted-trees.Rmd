@@ -1,0 +1,193 @@
+---
+title: "Random Forests and Gradient-Boosted Trees"
+output: pdf_document
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") }) 
+date: "2023-07-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.align = "center", warning = FALSE, message = FALSE)
+library(tidyverse)
+library(ranger)
+library(caret)
+library(vip)
+library(xgboost)
+library(pdp)
+```
+
+## Bagging
+
+**Bootstrap aggregation** (aka bagging) is a general approach for overcoming high variance
+
+* Bootstrap: sample the training data with replacement -- each bootstrap sample should have the same number of observations as the original sample
+
+### Bagging Algorithm
+
+* Start with a specified number of trees B
+
+* To generate a preidction for a new point: 
+
+Regression: take the average across the B trees
+
+Classification: take the majority vote across B trees (could also use probabilities from the trees)
+
+Improves prediction accuracy via **wisdom of the crowds** but at the expense of interpretability. 
+
+#### But what if these trees are quite similar to one another?
+
+## Random Forest Algorithm
+
+Random Forests are **an extension of bagging**
+
+For each tree b in 1,...,B:
+
+* construct bootstrap sample from the training data
+
+* grow a deep, unpruned, complicated (aka overfit) **but with a twist**
+
+* At each split: limit the variables considered to a random subset m (random subset without replacement) of the original p variables
+
+Like bagging:
+
+* Regression: take the average across the B trees
+
+* Classification: take the majority vote across B trees (could also use probabilities from the trees)
+
+**split-variable randomization adds more randomness to make each tree more independent of each other**
+
+*m is a tuning parameter*
+
+## Example with MLB data
+
+```{r}
+mlb_data <- read_csv("https://shorturl.at/iCP15") %>%
+  janitor::clean_names() %>%
+  mutate_at(vars(bb_percent:k_percent), parse_number)
+
+model_mlb_data <- mlb_data %>%
+  dplyr::select(-name, -team, -playerid) 
+
+head(model_mlb_data)
+```
+
+```{r}
+init_mlb_rf <- ranger(war ~ ., data = model_mlb_data, num.trees = 50, importance = "impurity") 
+
+init_mlb_rf
+```
+
+### Out-of-Bag Estimate
+
+Since the trees are constructed via bootstrapped data (samples with replacements) - each sample is likely to have duplicate observations / rows.
+
+**Out-of-bag (OOB)**: original observations not contained in a single bootstrap sample
+
+* Can use the OOB samples to estimate predictive performance (OOB becomes better with larger datasets)
+
+* On average about 63% of original data ends up in any particular bootstrap sample
+
+### Variance Importance 
+
+```{r}
+vip(init_mlb_rf, geom = "point") +
+  theme_bw()
+```
+
+
+### Tuning Random Forests
+
+```{r}
+rf_tune_grid <- expand.grid(mtry = seq(3, 18, by = 3), splitrule = "variance",  min.node.size = 5)
+set.seed(1917)
+
+caret_mlb_rf <- train(war ~ ., data = model_mlb_data, method = "ranger", num.trees = 50, trControl = trainControl(method = "cv", number = 5), tuneGrid = rf_tune_grid)
+```
+
+```{r}
+ggplot(caret_mlb_rf) + theme_bw()
+```
+
+## Boosting
+
+Build ensemble models **sequentially**
+
+* start with a weak learner, e.g. small decision tree with few splits 
+
+* each model in the sequence *slightly* improves upon the predictions of the previous models **by focusing on the observations with the largest errors / residuals** (i.e., up-weight the observations incorrectly predicted)
+
+## Boosted Trees Algorithm
+
+*regression setting*
+
+Write the prediction at step $t$ of the search as $\hat{y}_i^{(t)}$, start with $\hat{y}_i^{(0)} = 0$
+
+* Fit the first decision tree $f_1$ to the data: $\hat{y}_i^{(1)} = f_1(x_i) = \hat{y}_i^{(0)} + f_1(x_i)$
+
+* Fit the next tree $f_2$ to the residuals of the previous: $y_i - \hat{y}_i^{(1)}$
+
+* Add this to the prediction: $\hat{y}_i^{(2)} = \hat{y}_i^{(1)} + f_2(x_i) = f_1(x_i) + f_2(x_i)$
+
+* Fit the next tree $f_3$ to the residuals of the previous: $y_i - \hat{y}_i^{(2)}$
+
+* Add this to the prediction: $\hat{y}_i^{(3)} = \hat{y}_i^{(2)} + f_3(x_i) = f_1(x_i) + f_2(x_i) + f_3(x_i)$
+
+**Continue until some stopping criteria** to reach final model as a **sum of trees**:
+
+$$\hat{y_i} = f(x_i) = \sum_{b=1}^B f_b(x_i)$$
+
+## Gradient Boosted Trees
+
+Regression boosting algorithm can be generalized to other loss functions (not just residuals) via gradient descent - leading to gradient boosted trees, aka gradient boosting machines (GBMs)
+
+Update the model parameters in the direction of the loss function's descending gradient
+
+**SOME NOTES:**
+
+*we must tune the learning rate (i.e., it is a hyperparameter)*
+
+*Stochastic gradient descent can help with complex loss functions*
+
+* *Can take random samples of the data when updating - makes algorithm faster and adds randomness to get closer to global minimum (no guarantees!)*
+
+### Tuning GBMs
+
+What we have to consider tuning (our hyperparameters):
+
+* number of trees B (nrounds)
+
+* learning rate (eta), i.e. how much we update in each step
+
+* these two really have to be tuned together
+
+* complexity of the trees (depth, number of observations in nodes) 
+
+* XGBoost also provides more regularization (via gamma) and early stopping 
+
+More work to tune properly as compared to random forests...but GBMs have more flexibility in their usage for particular objective functions 
+
+### Example
+
+```{r}
+xgboost_tune_grid <- expand.grid(nrounds = seq(from = 20, to = 200, by = 20), eta = c(0.025, 0.05, 0.1, 0.3), gamma = 0, max_depth = c(1, 2, 3, 4), colsample_bytree = 1, min_child_weight = 1, subsample = 1)
+
+xgboost_tune_control <- trainControl(method = "cv", number = 5, verboseIter = FALSE)
+
+set.seed(1937)
+
+xgb_tune <- train(x = as.matrix(dplyr::select(model_mlb_data, -war)), y = model_mlb_data$war, trControl = xgboost_tune_control, tuneGrid = xgboost_tune_grid, objective = "reg:squarederror", method = "xgbTree", verbosity = 0)
+
+xgb_tune$bestTune
+```
+
+```{r}
+xgb_fit_final <- xgboost(data = as.matrix(dplyr::select(model_mlb_data, -war)), label = model_mlb_data$war, objective = "reg:squarederror", nrounds = xgb_tune$bestTune$nrounds, params = as.list(dplyr::select(xgb_tune$bestTune, -nrounds)), verbose = 0)
+
+vip(xgb_fit_final) + theme_bw()
+```
+
+```{r}
+partial(xgb_fit_final, pred.var = "off", train = as.matrix(dplyr::select(model_mlb_data, -war)), plot.engine = "ggplot2", plot = TRUE, type = "regression") + theme_bw()
+```
+
+
