@@ -1,0 +1,195 @@
+---
+title: "Dimension Reduction (PCA)"
+output: pdf_document
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") }) 
+date: "07-10-2023"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.align = "center", warning = FALSE, message = FALSE)
+library(tidyverse)
+library(broom)
+```
+
+# What is the goal of dimension reduction?
+
+We have *p* variables (columns) for *n* observations (rows) BUT which variables are **interesting**?
+
+* **REFINED QUESTION:** can we "project" data to a lower dimension but keep maximal information? 
+
+* **SHARPER QUESTION:** is there another "basis", which better expresses the information in our original data set?
+
+
+
+# Linear Algebra Interlude 
+
+
+
+* 2D vectors - magnitude ('norm') and direction ('dot product')
+
+* Projection: length of the shadow of the given vector over another vector 
+
+$$Proj_{w}(v) =(v^Tw^*)w^* $$
+where:
+
+$$w^* = \frac{w}{||w||}$$
+and 
+
+$v^Tw^*$ = degree of information preserved about v after projecting onto w
+
+**MATRICES** can be thought of as:
+
+* data
+
+* functions (linear transformations)
+
+**EIGENVALUES AND EIGENVALUES:**
+
+$$Au = \lambda u$$
+
+$\lambda$ = eigenvalue
+
+$u$ = eigenvector
+
+**Importance:**
+
+* Eigenvectors basically stay invariant to rotation after beign acted on by A -- "holding ground after being acted on by A"
+
+\newpage
+
+# PCA
+
+**GOAL:** can we find p new directions that preserves:
+
+* linearity
+
+* maximizes variance explained
+
+* are orthogonal
+
+Let *u* be the vector that preserves the most information from the data: 
+
+$$max \sum_{i = 1}^{p}({x_i^Tu})^2$$
+
+s.t. $u^Tu = 1$, or equivalently: $u^Tu -  1 = 0$
+
+Then to find the other principal components:
+
+$$max \sum_{i = 1}^{p}({x_i^Tu})^2$$
+
+s.t. $u_2^Tu_2 = 1$ AND $u_1 \perp u2$ 
+
+* PCA explores the covariance between variables and combines variables into a smaller set of uncorrelated variables called principal components (PCs)
+
+* The first principal component is the linear combination of the *p* variables that has the **largest variance**. The amount of variability captured goes in descending order. 
+
+# Singular Value Decomposition (SVD)
+
+**X is the convariance matrix**
+
+$$X = UDV^T$$
+* Matrices U and V contain the left and right sinular vectors of scaled matrix X
+
+* D is the diagonal matrix of the singular values
+
+* SVD simplifies matrix-vector multiplication as rotate, scale, and rotate again
+
+* V is called the loading matrix 
+
+Z = XV is the PC matrix
+
+### Eigenvalue Decomposition
+
+* V are **eigenvectors** of $X^TX$
+
+* U are the **eigenvectors** of $XX^T$
+
+* The singular values (diagonal of D) are square roots of teh **eigenvalues** of$X^TX$ or $XX^T$
+
+* Meaning that Z = UD
+
+
+
+# Example
+
+```{r}
+nfl_teams_data <- read_csv("https://shorturl.at/cfmpW") 
+
+nfl_model_data <- nfl_teams_data %>%  mutate(score_diff = points_scored - points_allowed) %>% 
+# Only use rows with air yards
+filter(season >= 2006) %>%
+  dplyr::select(-wins, -losses, -ties, -points_scored, -points_allowed, -season, -team)
+```
+
+```{r}
+model_x <- as.matrix(dplyr::select(nfl_model_data, -score_diff))
+
+pca_nfl <- prcomp(model_x, center = TRUE, scale = TRUE)
+
+summary(pca_nfl)
+```
+
+```{r}
+pca_nfl %>%
+  tidy(matrix = "eigenvalues") %>%
+  ggplot(aes(x = PC, y = percent)) +  geom_line()+
+  geom_point() +
+  geom_hline(yintercept = 1 / ncol(model_x), color = "darkred", linetype = "dashed") +
+  theme_bw()
+```
+
+```{r}
+pca_nfl %>%
+  augment(nfl_model_data) %>% #<<
+  bind_cols({
+    nfl_teams_data %>% 
+      filter(season >= 2006) %>%
+      dplyr::select(season, team)
+  }) %>%
+  unite("team_id", team:season, sep = "-", #<<
+        remove = FALSE) %>%
+  ggplot(aes(x = .fittedPC1, y = .fittedPC2, 
+             color = season)) +
+  geom_text(aes(label = team_id), alpha = 0.9) +
+  scale_color_gradient(low = "purple", high = "green") +
+  theme_bw() + theme(legend.position = "bottom")
+```
+```{r}
+arrow_style <- arrow(
+  angle = 20, ends = "first", type = "closed", 
+  length = grid::unit(8, "pt"))
+library(ggrepel)
+
+pca_nfl %>%
+  tidy(matrix = "rotation") %>%
+  pivot_wider(names_from = "PC", names_prefix = "PC", values_from = "value") %>%
+  mutate(stat_type = ifelse(str_detect(column, "offense"),
+"offense", "defense")) %>%
+  ggplot(aes(PC1, PC2)) +
+  geom_segment(xend = 0, yend = 0, arrow = arrow_style) +
+  geom_text_repel(aes(label = column, color = stat_type),
+                  size = 3) +
+  scale_color_manual(values = c("darkred", "darkblue")) +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+```{r}
+library(factoextra)
+fviz_eig(pca_nfl)
+```
+
+```{r}
+fviz_pca_ind(pca_nfl)
+```
+
+```{r}
+fviz_pca_var(pca_nfl)
+```
+
+**Biplot** displays both the space of observations and the space of variables 
+
+```{r}
+fviz_pca_biplot(pca_nfl)
+```
+
