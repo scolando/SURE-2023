@@ -3,6 +3,8 @@ Repository with my notes and labs from Carnegie Mellon's Statistics Undergraduat
 
 ## TOPICS COVERED
 
+* Advanced Regression Topics (Kernels, Smoothers, and Generalized Additive Models)
+
 * Dimension Reduction
 
 * Random Forests and Gradient-boosting
