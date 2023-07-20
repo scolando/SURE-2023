@@ -1,0 +1,163 @@
+---
+title: 'Web Scraping: A Primer'
+output: pdf_document
+knit: (function(inputFile, encoding) {
+  rmarkdown::render(inputFile, encoding = encoding, output_dir = "..") }) 
+date: "July 20th, 2023"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center")
+library(tidyverse)
+library(rvest)
+library(ggimage)
+library(httr)
+library(polite)
+```
+
+## Scraping HTML Tables
+
+```{r specifying url}
+nhl_url <- "https://www.hockey-reference.com/leaders/games_played_career.html"
+```
+
+
+```{r scraping hockey reference table}
+nhl_tbl <- nhl_url |>
+  read_html() |>
+  html_element(css = "#stats_career_NHL") |>
+  html_table()
+# found the css element by going through inspecting the html for the table 
+# and copying the selector
+```
+
+[**Click to go to Stringr cheat sheet**](https://github.com/rstudio/cheatsheets/blob/main/strings.pdf)
+
+```{r cleaning with stringr}
+nhl_tbl |>
+  mutate(HOF = if_else(str_detect(Player, "\\*"), 1, 0),
+         Player = str_remove(Player, "\\*"),
+         Rank = as.numeric(str_remove(Rank, "\\."))) |>
+  fill(Rank)
+```
+
+```{r second example}
+fb_url <- "https://fbref.com/en/comps/183/2017-2018/2017-2018-Frauen-Bundesliga-Stats"
+
+fb_url |>
+  read_html() |>
+  html_element(css = "#results2017-20181831_overall") |>
+  html_table()
+```
+
+## Scraping Images
+
+```{r}
+fb_url <- "https://fbref.com/en/comps/183/2017-2018/2017-2018-Frauen-Bundesliga-Stats"
+
+fb_node <- fb_url |>
+  read_html() |>
+  html_element(css = "#results2017-20181831_overall")
+```
+
+
+```{r}
+fb_imgs <- fb_node |>
+  html_elements("img") |>
+  html_attr("src")
+```
+
+```{r}
+fb_links <- fb_node |>
+  html_elements("a") |>
+  html_attr("href") |>
+  str_subset("squads")
+```
+
+
+```{r}
+fb_tbl <- fb_node |> 
+  html_table() |> 
+  mutate(img = fb_imgs,
+         link = fb_links)
+
+head(fb_tbl)
+```
+
+\newpage
+
+```{r}
+fb_tbl |>
+  mutate(img = str_remove(img, "mini.")) |> 
+  ggplot(aes(GA, GF)) +
+  geom_image(aes(image = img), size = 0.08, asp = 1) +
+  theme_classic()
+```
+
+## Scraping Text
+
+```{r}
+wimbledon_url <- "https://en.wikipedia.org/wiki/2009_Wimbledon_Championships_–_Women%27s_singles"
+```
+
+```{r}
+wimbledon_info <- wimbledon_url |>
+  read_html() |>
+  html_element(css = "#mw-content-text > div.mw-parser-output > div:nth-child(13)") |>
+  html_text2() |>
+  str_split_1("\\n")
+
+wimbledon_info
+```
+
+## APIs
+
+```{r}
+f1_api <- "http://ergast.com/api/f1/constructorStandings/1/constructors.json"
+f1_response <- f1_api |> 
+  GET()
+f1_response
+```
+
+```{r}
+f1_content <- f1_response |>   
+  content()
+glimpse(f1_content)
+```
+```{r}
+f1_constructor_list <- f1_content |> 
+  pluck("MRData") |> 
+  pluck("ConstructorTable") |> 
+  pluck("Constructors")
+
+f1_constructor_list[[1]]
+```
+```{r}
+f1_constructor_tbl <- f1_constructor_list |> 
+  as_tibble_col(column_name = "info") |> # convert list to tibble
+  unnest_wider(info) # unnest a list-column into columns
+f1_constructor_tbl
+```
+
+\newpage
+
+## Polite Package
+
+Polite ensures that you're respecting the `robots.txt` and not submitting too many requests
+
+```{r}
+wimbledon_url <- "https://en.wikipedia.org/wiki/2009_Wimbledon_Championships_-_Women's_singles"
+session <- wimbledon_url |> 
+  bow()
+session
+```
+
+```{r}
+# scrape() essentially replaces read_html() seen earlier
+session |> 
+  scrape() |>
+  html_element("#mw-content-text > div.mw-parser-output > div:nth-child(13)") |> 
+  html_text2() |>
+  str_split_1("\\n")
+```
+

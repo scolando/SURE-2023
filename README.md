@@ -3,6 +3,8 @@ Repository with my notes and labs from Carnegie Mellon's Statistics Undergraduat
 
 ## TOPICS COVERED
 
+* Web Scraping: A Primer
+
 * Advanced Classification Topics (Mulinomial Logistiic Regression, Model Evaluation, Shapley Values)
 
 * Advanced Regression Topics (Kernels, Smoothers, and Generalized Additive Models)
